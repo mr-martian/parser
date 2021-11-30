@@ -29,7 +29,9 @@ class Parser(object):
         self.transform = transform
 
     def train(self, train, dev, test, buckets=32, batch_size=5000, update_steps=1,
-              clip=5.0, epochs=5000, patience=100, **kwargs):
+              clip=5.0, epochs=5000, patience=100,
+              curriculum_schedule=None, curriculum_metric=None,
+              curriculum_batch=100, **kwargs):
         args = self.args.update(locals())
         init_logger(logger, verbose=args.verbose)
 
@@ -39,6 +41,8 @@ class Parser(object):
             batch_size = batch_size // dist.get_world_size()
         logger.info("Loading the data")
         train = Dataset(self.transform, args.train, **args).build(batch_size, buckets, True, dist.is_initialized())
+        if args.curriculum_schedule:
+            train.curriculum_prebuild(**args)
         dev = Dataset(self.transform, args.dev).build(batch_size, buckets)
         test = Dataset(self.transform, args.test).build(batch_size, buckets)
         logger.info(f"\n{'train:':6} {train}\n{'dev:':6} {dev}\n{'test:':6} {test}\n")
@@ -71,6 +75,11 @@ class Parser(object):
             start = datetime.now()
 
             logger.info(f"Epoch {epoch} / {args.epochs}:")
+            if args.curriculum_schedule:
+                train.curriculum_build(epoch, args.curriculum_schedule,
+                                       args.curriculum_length,
+                                       args.curriculum_batch, batch_size,
+                                       buckets, True, dist.is_initialized())
             self._train(train.loader)
             loss, dev_metric = self._evaluate(dev.loader)
             logger.info(f"{'dev:':5} loss: {loss:.4f} - {dev_metric}")

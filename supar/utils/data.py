@@ -5,6 +5,7 @@ import torch.distributed as dist
 from supar.utils.alg import kmeans
 from supar.utils.transform import Batch
 from torch.utils.data import DataLoader
+import math
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -83,6 +84,29 @@ class Dataset(torch.utils.data.Dataset):
                                  batch_sampler=Sampler(self.buckets, batch_size, shuffle, distributed),
                                  collate_fn=lambda x: Batch(x))
         return self
+
+    def curriculum_prebuild(self, **kwargs):
+        self.all_sentences = self.sentences
+        self.all_sentences.sort(key=lambda s: s.difficulty)
+        self.min_difficulty = self.all_sentences[0].difficulty
+        self.max_difficulty = self.all_sentences[-1].difficulty
+
+    def curriculum_build(self, epoch, curriculum_schedule, curriculum_length,
+                         curriculum_batch,
+                         batch_size, n_buckets=1, shuffle=False,
+                         distributed=False):
+        c = 1.0
+        if curriculum_schedule == 'sqrt':
+            c = min(1.0, math.sqrt((epoch * (1 - (0.01**2)) / curriculum_length) + (0.01**2)))
+        cutoff = math.ceil(len(self.all_sentences) * c)
+        g = torch.Generator()
+        g.manual_seed(epoch)
+        self.sentences = []
+        for i in torch.randperm(cutoff, generator=g):
+            self.sentences.append(self.all_sentences[i])
+            if len(self.sentences) == curriculum_batch:
+                break
+        self.build(batch_size, n_buckets, shuffle, distributed)
 
 
 class Sampler(torch.utils.data.Sampler):

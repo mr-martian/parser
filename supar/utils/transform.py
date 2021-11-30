@@ -304,7 +304,8 @@ class CoNLL(Transform):
             return False
         return next(tarjan(sequence), None) is None
 
-    def load(self, data, lang=None, proj=False, max_len=None, **kwargs):
+    def load(self, data, lang=None, proj=False, max_len=None,
+             curriculum_metric=None, **kwargs):
         r"""
         Loads the data in CoNLL-X format.
         Also supports for loading data from CoNLL-U file with comments and non-integer IDs.
@@ -340,6 +341,8 @@ class CoNLL(Transform):
         for line in progress_bar(lines):
             if not line:
                 sentences.append(CoNLLSentence(self, lines[start:i]))
+                if curriculum_metric:
+                    sentences[-1].calculate_difficulty(curriculum_metric)
                 start = i + 1
             i += 1
         if proj:
@@ -754,12 +757,40 @@ class CoNLLSentence(Sentence):
                 self.values.append(value)
         self.values = list(zip(*self.values))
 
+        self.difficulty = 0
+
     def __repr__(self):
         # cover the raw lines
         merged = {**self.annotations,
                   **{i: '\t'.join(map(str, line))
                      for i, line in enumerate(zip(*self.values))}}
         return '\n'.join(merged.values()) + '\n'
+
+    def calculate_difficulty(self, metric):
+        if metric == 'flat':
+            self.difficulty = 1
+        elif metric == 'length':
+            self.difficulty = len(self.values[0])
+        elif metric == 'deplen':
+            self.difficulty = 0
+            for w, h in enumerate(self.values[6], 1):
+                if int(h) != 0:
+                    self.difficulty += abs(int(h) - w)
+        elif metric == 'sandra':
+            wgt = {
+                'conj': 8,
+                'csubj': 7,
+                'ccomp': 7,
+                'xcomp': 7,
+                'nsubj:pass': 6,
+                'case': 5,
+                'iobj': 4,
+                'obj': 3,
+                'nsubj': 2
+            }
+            self.difficulty = sum(wgt.get(l, 1) for l in self.values[7])
+        else:
+            raise NameError(f"Unknown difficulty metric '{metric}'")
 
 
 class TreeSentence(Sentence):
