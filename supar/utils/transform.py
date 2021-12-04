@@ -771,12 +771,12 @@ class CoNLLSentence(Sentence):
             self.difficulty = 1
         elif metric == 'length':
             self.difficulty = len(self.values[0])
-        elif metric == 'deplen':
+        elif metric == ['deplen', 'deplennorm']:
             self.difficulty = 0
             for w, h in enumerate(self.values[6], 1):
                 if int(h) != 0:
                     self.difficulty += abs(int(h) - w)
-        elif metric == 'sandra':
+        elif metric in ['labwgt', 'labwgtnorm']:
             wgt = {
                 'conj': 8,
                 'csubj': 7,
@@ -791,6 +791,8 @@ class CoNLLSentence(Sentence):
             self.difficulty = sum(wgt.get(l, 1) for l in self.values[7])
         else:
             raise NameError(f"Unknown difficulty metric '{metric}'")
+        if metric in ['deplennorm', 'labwgtnorm']:
+            self.difficulty /= len(self.values[0])
 
 
 class TreeSentence(Sentence):
