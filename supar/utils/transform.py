@@ -771,7 +771,7 @@ class CoNLLSentence(Sentence):
             self.difficulty = 1
         elif metric == 'length':
             self.difficulty = len(self.values[0])
-        elif metric == ['deplen', 'deplennorm']:
+        elif metric in ['deplen', 'deplennorm']:
             self.difficulty = 0
             for w, h in enumerate(self.values[6], 1):
                 if int(h) != 0:
